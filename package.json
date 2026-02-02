@@ -1,0 +1,29 @@
+{
+  "name": "verifly-cli",
+  "version": "1.0.0",
+  "description": "Email verification CLI - Powered by Verifly.email",
+  "main": "lib/index.js",
+  "bin": {
+    "verifly": "./bin/verifly.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "email",
+    "verification",
+    "validation",
+    "cli",
+    "verifly"
+  ],
+  "author": "Verifly <hello@verifly.email>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/james-sib/verifly-cli"
+  },
+  "homepage": "https://verifly.email",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
