@@ -19,7 +19,7 @@ const readline = require('readline');
 // Configuration
 const CONFIG_PATH = path.join(process.env.HOME || process.env.USERPROFILE, '.verifly');
 const API_BASE = 'verifly.email';
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 // Colors for terminal
 const colors = {
@@ -272,12 +272,45 @@ ${colors.dim}Powered by Verifly.email - $5/10k emails${colors.reset}
       }
       
       console.log('Fetching stats...');
-      const stats = await apiRequest('/v1/stats', config.apiKey);
+      
+      // Fetch from both endpoints for complete picture
+      let credits, usage;
+      try {
+        credits = await apiRequest('/v1/credits', config.apiKey);
+      } catch (e) {
+        credits = {};
+      }
+      try {
+        usage = await apiRequest('/v1/usage', config.apiKey);
+      } catch (e) {
+        usage = {};
+      }
+      
+      const summary = usage.summary || {};
+      const account = credits;
       
       console.log(`\n${colors.blue}Account Statistics:${colors.reset}`);
-      console.log(`  Used this month: ${stats.used || 0}`);
-      console.log(`  Remaining: ${stats.remaining || 'N/A'}`);
-      console.log(`  Plan: ${stats.plan || 'Free'}`);
+      console.log(`  Plan:             ${account.plan || 'Free'}`);
+      console.log(`  Credits remaining: ${account.credits ?? 'N/A'}`);
+      console.log(`  Used today:       ${account.used_today ?? 'N/A'}`);
+      console.log(`  Used this month:  ${account.used_this_month ?? summary.total_credits_used ?? 'N/A'}`);
+      
+      if (summary.total_emails_processed) {
+        console.log(`\n${colors.blue}This Month:${colors.reset}`);
+        console.log(`  Emails processed: ${summary.total_emails_processed}`);
+        console.log(`  Total requests:   ${summary.total_requests}`);
+        if (summary.by_endpoint) {
+          console.log(`  Via verify:       ${summary.by_endpoint.verify || 0}`);
+          console.log(`  Via batch:        ${summary.by_endpoint.batch || 0}`);
+        }
+      }
+      
+      if (usage.daily && usage.daily.length > 0) {
+        console.log(`\n${colors.blue}Recent Daily Usage:${colors.reset}`);
+        usage.daily.slice(0, 7).forEach(day => {
+          console.log(`  ${day.date}: ${day.credits} credits, ${day.emails} emails`);
+        });
+      }
       break;
 
     default:
