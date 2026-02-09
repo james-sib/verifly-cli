@@ -1,8 +1,10 @@
-# Verifly CLI 📧
+# verifly-cli
 
-Email verification from your terminal. Powered by [Verifly.email](https://verifly.email) — the cheapest email verification API.
+The **cheapest** email verification tool. Verify emails from your terminal.
 
-## Installation
+Powered by [Verifly.email](https://verifly.email) — $5/10k verifications.
+
+## Install
 
 ```bash
 npm install -g verifly-cli
@@ -11,129 +13,76 @@ npm install -g verifly-cli
 ## Quick Start
 
 ```bash
-# Verify a single email
+# Set your API key (get free at https://verifly.email/signup)
+verifly config --key vf_your_api_key
+
+# Verify an email
 verifly verify user@example.com
 
-# Offline validation (no API needed)
-verifly offline user@example.com
-
-# Verify a CSV file
+# Bulk verify from CSV
 verifly verify-csv emails.csv -o results.csv
-```
 
-## Setup
-
-Get your free API key at [verifly.email/signup](https://verifly.email/signup) (1000 free verifications/month).
-
-```bash
-verifly config --key vf_your_api_key_here
+# Quick offline check (no API needed)
+verifly offline user@example.com
 ```
 
 ## Commands
 
-### `verifly verify <email>`
+| Command | Description |
+|---------|-------------|
+| `verifly verify <email>` | Verify a single email address |
+| `verifly verify-csv <file>` | Bulk verify emails from a CSV file |
+| `verifly config --key <key>` | Save your API key |
+| `verifly stats` | View your usage statistics |
+| `verifly offline <email>` | Offline format + disposable check |
 
-Verify a single email address using the API.
+## Features
 
-```bash
-$ verifly verify test@gmail.com
+- ✅ **Single email verification** — instant results
+- 📋 **Bulk CSV verification** — process thousands of emails
+- 🔒 **Offline mode** — basic validation without API
+- 🗑️ **Disposable detection** — catch throwaway emails
+- 👤 **Role account detection** — flag info@, admin@, etc.
+- 💰 **Cheapest on the market** — $5 per 10,000 verifications
 
-Email: test@gmail.com
-Status: valid
+## Output
+
+```
+╔═══════════════════════════════════════╗
+║  Verifly CLI v1.0.0                   ║
+║  The cheapest email verification API  ║
+╚═══════════════════════════════════════╝
+
+Email: user@example.com
+Status: deliverable
 ```
 
-### `verifly offline <email>`
+## API Key
 
-Quick offline validation (regex + disposable domain check). No API key required.
+Get your free API key at [verifly.email/signup](https://verifly.email/signup).
 
-```bash
-$ verifly offline spam@mailinator.com
+- **Free tier**: 100 verifications/month
+- **Paid**: Starting at $5/10k — the cheapest email verification API
 
-Email: spam@mailinator.com
-Status: valid
-⚠ Disposable email detected
-(Offline validation - use API for full check)
+## CSV Format
+
+Input CSV should have one email per line:
+
+```
+user1@example.com
+user2@example.com
+admin@company.com
 ```
 
-### `verifly verify-csv <file>`
+Output includes verification status:
 
-Bulk verify emails from a CSV file.
-
-```bash
-$ verifly verify-csv contacts.csv -o verified.csv
-
-Input: contacts.csv
-Output: verified.csv
-Processing...
-
-Processed: 100/100
-
-✓ Done!
-
-Results:
-  Valid:   78
-  Invalid: 15
-  Risky:   7
-
-Output saved to: verified.csv
+```csv
+email,status,disposable
+user1@example.com,deliverable,false
+user2@example.com,undeliverable,false
+admin@company.com,deliverable,false
 ```
-
-### `verifly stats`
-
-Check your API usage.
-
-```bash
-$ verifly stats
-
-Account Statistics:
-  Used this month: 247
-  Remaining: 753
-  Plan: Free
-```
-
-### `verifly config`
-
-Manage your configuration.
-
-```bash
-# Set API key
-verifly config --key vf_xxxxx
-
-# View current config
-verifly config
-```
-
-## Pricing
-
-| Plan | Price | Verifications |
-|------|-------|---------------|
-| Free | $0 | 1000/month |
-| Starter | $5 | 10,000 |
-| Growth | $40 | 100,000 |
-| Scale | $200 | 1,000,000 |
-
-Compare to competitors:
-- ZeroBounce: $75/10k
-- NeverBounce: $50/10k
-- Bouncify: $19/10k
-- **Verifly: $5/10k** ✅
-
-## Why Verifly?
-
-- 💰 **Cheapest option** — $5/10k vs $50-75 for competitors
-- 🎁 **Generous free tier** — 1000/month vs 10-100 elsewhere
-- ⚡ **Fast** — ~100ms response time
-- 🎯 **99%+ accuracy** — Same as expensive alternatives
-- 🛠️ **Simple API** — One endpoint, clear responses
-
-## Contributing
-
-Issues and PRs welcome at [github.com/james-sib/verifly-cli](https://github.com/james-sib/verifly-cli).
 
 ## License
 
-MIT
-
----
-
-Built with ❤️ by [Verifly.email](https://verifly.email) — The cheapest email verification API that doesn't suck.
+MIT — [Verifly.email](https://verifly.email)

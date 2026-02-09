@@ -18,7 +18,7 @@ const readline = require('readline');
 
 // Configuration
 const CONFIG_PATH = path.join(process.env.HOME || process.env.USERPROFILE, '.verifly');
-const API_BASE = 'api.verifly.email';
+const API_BASE = 'verifly.email';
 const VERSION = '1.0.0';
 
 // Colors for terminal
@@ -51,7 +51,7 @@ function apiRequest(endpoint, apiKey) {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: API_BASE,
-      path: endpoint,
+      path: `/api${endpoint}`,
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
