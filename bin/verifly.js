@@ -1,326 +1,98 @@
 #!/usr/bin/env node
-/**
- * Verifly CLI - Email Verification Tool
- * 
- * Usage:
- *   verifly verify user@example.com
- *   verifly verify-csv input.csv -o output.csv
- *   verifly config --key YOUR_API_KEY
- *   verifly stats
- * 
- * Powered by Verifly.email - The cheapest email verification API
- */
+import { readFile, writeFile } from 'node:fs/promises'
 
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
-const readline = require('readline');
+const DEFAULT_API_BASE = 'https://verifly.email/api/v1'
+const PUBLIC_BASE = 'https://verifly.email'
+const [, , command, ...rawArgs] = process.argv
 
-// Configuration
-const CONFIG_PATH = path.join(process.env.HOME || process.env.USERPROFILE, '.verifly');
-const API_BASE = 'verifly.email';
-const VERSION = '1.0.1';
-
-// Colors for terminal
-const colors = {
-  reset: '\x1b[0m',
-  green: '\x1b[32m',
-  red: '\x1b[31m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  dim: '\x1b[2m'
-};
-
-// Load config
-function loadConfig() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    }
-  } catch (e) {}
-  return {};
+function help() {
+  console.log([
+    'Verifly CLI', '',
+    'Usage:',
+    '  verifly verify <email> [--format json|text] [--out file]',
+    '  verifly batch <file> [--format json|csv] [--out file] [--limit 100]',
+    '  verifly clean <file> [--format json|csv] [--out file]',
+    '  verifly extract <file> [--format json|csv] [--out file]',
+    '  verifly domain <domain-or-email> [--format json|text]',
+    '  verifly credits',
+    '  verifly usage', '',
+    'Options:',
+    '  --api-key <key>       Overrides VERIFLY_API_KEY.',
+    '  --base <url>          Overrides VERIFLY_API_BASE.',
+    '  --format <format>     json, csv, or text depending on command.',
+    '  --out <file>          Write output to a file.',
+    '  --limit <n>           Limit batch size before API call.', '',
+    'Environment:',
+    '  VERIFLY_API_KEY       Required for verify, batch, clean, extract, credits, usage.',
+    '  VERIFLY_API_BASE      Optional. Defaults to https://verifly.email/api/v1.'
+  ].join('\n'))
 }
 
-// Save config
-function saveConfig(config) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-}
-
-// Make API request
-function apiRequest(endpoint, apiKey) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: API_BASE,
-      path: `/api${endpoint}`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'User-Agent': `verifly-cli/${VERSION}`
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(new Error('Invalid API response'));
-        }
-      });
-    });
-    
-    req.on('error', reject);
-    req.end();
-  });
-}
-
-// Verify single email
-async function verifyEmail(email, apiKey) {
-  try {
-    const result = await apiRequest(`/v1/verify?email=${encodeURIComponent(email)}`, apiKey);
-    return result;
-  } catch (err) {
-    return { error: err.message };
+function parseArgs(args) {
+  const options = { format: 'json', out: '', apiKey: process.env.VERIFLY_API_KEY || '', base: process.env.VERIFLY_API_BASE || DEFAULT_API_BASE, limit: 100 }
+  const rest = []
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === '--format') options.format = args[++i] || 'json'
+    else if (arg === '--out') options.out = args[++i] || ''
+    else if (arg === '--api-key') options.apiKey = args[++i] || ''
+    else if (arg === '--base') options.base = (args[++i] || DEFAULT_API_BASE).replace(/\/$/, '')
+    else if (arg === '--limit') options.limit = Number(args[++i] || 100)
+    else rest.push(arg)
   }
+  return { options, rest }
 }
 
-// Offline regex validation (basic)
-function offlineValidate(email) {
-  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isValid = regex.test(email);
-  
-  // Check for common disposable domains
-  const disposableDomains = ['mailinator.com', 'guerrillamail.com', 'tempmail.com', 'yopmail.com', '10minutemail.com'];
-  const domain = email.split('@')[1]?.toLowerCase();
-  const isDisposable = disposableDomains.includes(domain);
-  
-  return {
-    email,
-    format: isValid ? 'valid' : 'invalid',
-    disposable: isDisposable,
-    offline: true
-  };
+function requireKey(options) { if (!options.apiKey) throw new Error('Missing VERIFLY_API_KEY or --api-key.') }
+function parseEmails(text) { const matches = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []; return [...new Set(matches.map((value) => value.trim().toLowerCase()))] }
+
+function toCsv(rows) {
+  const array = Array.isArray(rows) ? rows : rows?.results || rows?.emails || rows?.clean || []
+  if (!Array.isArray(array) || array.length === 0) return ''
+  const normalized = array.map((item) => typeof item === 'string' ? { email: item } : item)
+  const headers = [...new Set(normalized.flatMap((row) => Object.keys(row)))]
+  const quote = (value) => '"' + String(value ?? '').replace(/"/g, '""') + '"'
+  return [headers.join(','), ...normalized.map((row) => headers.map((key) => quote(row[key])).join(','))].join('\n') + '\n'
 }
 
-// Print result
-function printResult(result) {
-  const statusColor = result.result === 'valid' ? colors.green 
-    : result.result === 'invalid' ? colors.red 
-    : colors.yellow;
-  
-  console.log(`\n${colors.blue}Email:${colors.reset} ${result.email}`);
-  console.log(`${colors.blue}Status:${colors.reset} ${statusColor}${result.result || result.format}${colors.reset}`);
-  
-  if (result.disposable) {
-    console.log(`${colors.yellow}⚠ Disposable email detected${colors.reset}`);
-  }
-  if (result.role) {
-    console.log(`${colors.yellow}⚠ Role account (info@, admin@, etc.)${colors.reset}`);
-  }
-  if (result.offline) {
-    console.log(`${colors.dim}(Offline validation - use API for full check)${colors.reset}`);
-  }
+async function request(options, route, init = {}) {
+  requireKey(options)
+  const response = await fetch(options.base + route, { ...init, headers: { Authorization: 'Bearer ' + options.apiKey, 'Content-Type': 'application/json', ...(init.headers || {}) } })
+  const text = await response.text()
+  let data
+  try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
+  if (!response.ok) throw new Error('Verifly API ' + response.status + ': ' + (data?.error || data?.message || response.statusText))
+  return data
 }
 
-// Main CLI
+async function publicRequest(route) {
+  const response = await fetch(PUBLIC_BASE + route)
+  const data = await response.json()
+  if (!response.ok) throw new Error(data?.error || response.statusText)
+  return data
+}
+
+function textSummary(data) {
+  if (data?.domain && typeof data.score !== 'undefined') return ['Domain: ' + data.domain, 'Score: ' + data.score, 'MX records: ' + (data.mx?.length || 0), 'SPF: ' + (data.spf?.found ? 'found' : 'missing'), 'DMARC: ' + (data.dmarc?.policy || (data.dmarc?.found ? 'found' : 'missing'))].join('\n') + '\n'
+  return JSON.stringify(data, null, 2) + '\n'
+}
+
+async function output(data, options) {
+  const text = options.format === 'csv' ? toCsv(data) : options.format === 'text' ? textSummary(data) : JSON.stringify(data, null, 2) + '\n'
+  if (options.out) { await writeFile(options.out, text, 'utf8'); console.error('Wrote ' + options.out) } else { process.stdout.write(text) }
+}
+
 async function main() {
-  const args = process.argv.slice(2);
-  const command = args[0];
-  
-  // Show banner
-  console.log(`
-${colors.blue}╔═══════════════════════════════════════╗
-║  Verifly CLI v${VERSION}                     ║
-║  The cheapest email verification API  ║
-╚═══════════════════════════════════════╝${colors.reset}
-`);
-
-  if (!command || command === '--help' || command === '-h') {
-    console.log(`
-${colors.blue}Usage:${colors.reset}
-  verifly verify <email>           Verify a single email
-  verifly verify-csv <file>        Verify emails from CSV
-  verifly config --key <API_KEY>   Set your API key
-  verifly stats                    Show usage statistics
-  verifly offline <email>          Quick offline validation
-
-${colors.blue}Options:${colors.reset}
-  -o, --output <file>    Output file for CSV verification
-  -k, --key <key>        Use specific API key (override config)
-  --offline              Use offline validation only (no API)
-
-${colors.blue}Examples:${colors.reset}
-  verifly verify user@example.com
-  verifly verify-csv emails.csv -o results.csv
-  verifly config --key vf_xxxxxxxxxxxxx
-
-${colors.blue}Get your free API key:${colors.reset}
-  https://verifly.email/signup (1000 free verifications/month)
-
-${colors.dim}Powered by Verifly.email - $5/10k emails${colors.reset}
-`);
-    return;
-  }
-
-  const config = loadConfig();
-  
-  // Handle commands
-  switch (command) {
-    case 'config':
-      if (args[1] === '--key' && args[2]) {
-        config.apiKey = args[2];
-        saveConfig(config);
-        console.log(`${colors.green}✓ API key saved${colors.reset}`);
-        console.log(`${colors.dim}Config stored at: ${CONFIG_PATH}${colors.reset}`);
-      } else {
-        console.log(`Current API key: ${config.apiKey ? '****' + config.apiKey.slice(-4) : 'Not set'}`);
-        console.log(`\nTo set: verifly config --key YOUR_API_KEY`);
-      }
-      break;
-
-    case 'verify':
-      const email = args[1];
-      if (!email) {
-        console.error(`${colors.red}Error: Please provide an email address${colors.reset}`);
-        console.log('Usage: verifly verify user@example.com');
-        process.exit(1);
-      }
-      
-      if (args.includes('--offline') || !config.apiKey) {
-        const result = offlineValidate(email);
-        printResult(result);
-        if (!config.apiKey) {
-          console.log(`\n${colors.yellow}Tip: Set API key for full verification:${colors.reset}`);
-          console.log('  verifly config --key YOUR_API_KEY');
-          console.log('  Get free key: https://verifly.email/signup');
-        }
-      } else {
-        console.log('Verifying...');
-        const result = await verifyEmail(email, config.apiKey);
-        printResult(result);
-      }
-      break;
-
-    case 'offline':
-      const offEmail = args[1];
-      if (!offEmail) {
-        console.error(`${colors.red}Error: Please provide an email address${colors.reset}`);
-        process.exit(1);
-      }
-      const offResult = offlineValidate(offEmail);
-      printResult(offResult);
-      break;
-
-    case 'verify-csv':
-      const csvFile = args[1];
-      if (!csvFile) {
-        console.error(`${colors.red}Error: Please provide a CSV file${colors.reset}`);
-        process.exit(1);
-      }
-      
-      if (!fs.existsSync(csvFile)) {
-        console.error(`${colors.red}Error: File not found: ${csvFile}${colors.reset}`);
-        process.exit(1);
-      }
-      
-      const outputIndex = args.indexOf('-o') !== -1 ? args.indexOf('-o') : args.indexOf('--output');
-      const outputFile = outputIndex !== -1 ? args[outputIndex + 1] : csvFile.replace('.csv', '-verified.csv');
-      
-      console.log(`Input: ${csvFile}`);
-      console.log(`Output: ${outputFile}`);
-      console.log('Processing...\n');
-      
-      const content = fs.readFileSync(csvFile, 'utf8');
-      const emails = content.split('\n')
-        .map(line => line.trim())
-        .filter(line => line && line.includes('@'));
-      
-      const results = [];
-      let valid = 0, invalid = 0, risky = 0;
-      
-      for (const email of emails) {
-        const result = config.apiKey 
-          ? await verifyEmail(email, config.apiKey)
-          : offlineValidate(email);
-        
-        results.push(`${email},${result.result || result.format},${result.disposable || false}`);
-        
-        if (result.result === 'valid' || result.format === 'valid') valid++;
-        else if (result.result === 'invalid' || result.format === 'invalid') invalid++;
-        else risky++;
-        
-        process.stdout.write(`\rProcessed: ${results.length}/${emails.length}`);
-      }
-      
-      fs.writeFileSync(outputFile, 'email,status,disposable\n' + results.join('\n'));
-      
-      console.log(`\n\n${colors.green}✓ Done!${colors.reset}`);
-      console.log(`\nResults:`);
-      console.log(`  ${colors.green}Valid:${colors.reset}   ${valid}`);
-      console.log(`  ${colors.red}Invalid:${colors.reset} ${invalid}`);
-      console.log(`  ${colors.yellow}Risky:${colors.reset}   ${risky}`);
-      console.log(`\nOutput saved to: ${outputFile}`);
-      break;
-
-    case 'stats':
-      if (!config.apiKey) {
-        console.error(`${colors.red}Error: API key not set${colors.reset}`);
-        console.log('Set with: verifly config --key YOUR_API_KEY');
-        process.exit(1);
-      }
-      
-      console.log('Fetching stats...');
-      
-      // Fetch from both endpoints for complete picture
-      let credits, usage;
-      try {
-        credits = await apiRequest('/v1/credits', config.apiKey);
-      } catch (e) {
-        credits = {};
-      }
-      try {
-        usage = await apiRequest('/v1/usage', config.apiKey);
-      } catch (e) {
-        usage = {};
-      }
-      
-      const summary = usage.summary || {};
-      const account = credits;
-      
-      console.log(`\n${colors.blue}Account Statistics:${colors.reset}`);
-      console.log(`  Plan:             ${account.plan || 'Free'}`);
-      console.log(`  Credits remaining: ${account.credits ?? 'N/A'}`);
-      console.log(`  Used today:       ${account.used_today ?? 'N/A'}`);
-      console.log(`  Used this month:  ${account.used_this_month ?? summary.total_credits_used ?? 'N/A'}`);
-      
-      if (summary.total_emails_processed) {
-        console.log(`\n${colors.blue}This Month:${colors.reset}`);
-        console.log(`  Emails processed: ${summary.total_emails_processed}`);
-        console.log(`  Total requests:   ${summary.total_requests}`);
-        if (summary.by_endpoint) {
-          console.log(`  Via verify:       ${summary.by_endpoint.verify || 0}`);
-          console.log(`  Via batch:        ${summary.by_endpoint.batch || 0}`);
-        }
-      }
-      
-      if (usage.daily && usage.daily.length > 0) {
-        console.log(`\n${colors.blue}Recent Daily Usage:${colors.reset}`);
-        usage.daily.slice(0, 7).forEach(day => {
-          console.log(`  ${day.date}: ${day.credits} credits, ${day.emails} emails`);
-        });
-      }
-      break;
-
-    default:
-      console.error(`${colors.red}Unknown command: ${command}${colors.reset}`);
-      console.log('Run "verifly --help" for usage');
-      process.exit(1);
-  }
+  if (!command || command === '--help' || command === '-h') return help()
+  const { options, rest } = parseArgs(rawArgs)
+  if (command === 'verify') { const email = rest[0]; if (!email) throw new Error('Usage: verifly verify <email>'); return output(await request(options, '/verify?email=' + encodeURIComponent(email)), options) }
+  if (command === 'batch') { const file = rest[0]; if (!file) throw new Error('Usage: verifly batch <file>'); const emails = parseEmails(await readFile(file, 'utf8')).slice(0, options.limit); if (emails.length > 100) throw new Error('The /verify/batch endpoint accepts up to 100 emails per request.'); return output(await request(options, '/verify/batch', { method: 'POST', body: JSON.stringify({ emails }) }), options) }
+  if (command === 'clean') { const file = rest[0]; if (!file) throw new Error('Usage: verifly clean <file>'); const emails = parseEmails(await readFile(file, 'utf8')); return output(await request(options, '/clean', { method: 'POST', body: JSON.stringify({ emails }) }), options) }
+  if (command === 'extract') { const file = rest[0]; if (!file) throw new Error('Usage: verifly extract <file>'); const text = await readFile(file, 'utf8'); return output(await request(options, '/extract', { method: 'POST', body: JSON.stringify({ text, options: { deduplicate: true, lowercase: true } }) }), options) }
+  if (command === 'domain') { const value = rest[0]; if (!value) throw new Error('Usage: verifly domain <domain-or-email>'); return output(await publicRequest('/api/tools/domain-health?domain=' + encodeURIComponent(value)), options) }
+  if (command === 'credits') return output(await request(options, '/credits'), options)
+  if (command === 'usage') return output(await request(options, '/usage'), options)
+  throw new Error('Unknown command: ' + command)
 }
 
-main().catch(err => {
-  console.error(`${colors.red}Error: ${err.message}${colors.reset}`);
-  process.exit(1);
-});
+main().catch((error) => { console.error(error.message); process.exitCode = 1 })

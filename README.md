@@ -1,88 +1,43 @@
-# verifly-cli
+# @verifly/cli
 
-The **cheapest** email verification tool. Verify emails from your terminal.
-
-Powered by [Verifly.email](https://verifly.email) — $5/10k verifications.
+Agent-friendly command line tools for Verifly email verification and list hygiene.
 
 ## Install
 
-```bash
-npm install -g verifly-cli
-```
+~~~bash
+npm install -g @verifly/cli
+npx @verifly/cli --help
+~~~
 
-## Quick Start
+Until npm publishing is unblocked, download the package from https://verifly.email/downloads/verifly-agent-kit.zip.
 
-```bash
-# Set your API key (get free at https://verifly.email/signup)
-verifly config --key vf_your_api_key
+## Configure
 
-# Verify an email
-verifly verify user@example.com
+~~~bash
+export VERIFLY_API_KEY="vf_your_key"
+~~~
 
-# Bulk verify from CSV
-verifly verify-csv emails.csv -o results.csv
+PowerShell:
 
-# Quick offline check (no API needed)
-verifly offline user@example.com
-```
+~~~powershell
+$env:VERIFLY_API_KEY="vf_your_key"
+~~~
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `verifly verify <email>` | Verify a single email address |
-| `verifly verify-csv <file>` | Bulk verify emails from a CSV file |
-| `verifly config --key <key>` | Save your API key |
-| `verifly stats` | View your usage statistics |
-| `verifly offline <email>` | Offline format + disposable check |
+~~~bash
+verifly verify lead@example.com --format json
+verifly batch leads.csv --out results.json
+verifly clean leads.csv --format csv --out clean.csv
+verifly extract scraped.txt --out emails.json
+verifly domain example.com --format json
+verifly credits
+verifly usage
+~~~
 
-## Features
+## CI Exit Codes
 
-- ✅ **Single email verification** — instant results
-- 📋 **Bulk CSV verification** — process thousands of emails
-- 🔒 **Offline mode** — basic validation without API
-- 🗑️ **Disposable detection** — catch throwaway emails
-- 👤 **Role account detection** — flag info@, admin@, etc.
-- 💰 **Cheapest on the market** — $5 per 10,000 verifications
+- 0: command completed successfully.
+- 1: invalid arguments, missing API key, or Verifly/API failure.
 
-## Output
-
-```
-╔═══════════════════════════════════════╗
-║  Verifly CLI v1.0.0                   ║
-║  The cheapest email verification API  ║
-╚═══════════════════════════════════════╝
-
-Email: user@example.com
-Status: deliverable
-```
-
-## API Key
-
-Get your free API key at [verifly.email/signup](https://verifly.email/signup).
-
-- **Free tier**: 100 verifications/month
-- **Paid**: Starting at $5/10k — the cheapest email verification API
-
-## CSV Format
-
-Input CSV should have one email per line:
-
-```
-user1@example.com
-user2@example.com
-admin@company.com
-```
-
-Output includes verification status:
-
-```csv
-email,status,disposable
-user1@example.com,deliverable,false
-user2@example.com,undeliverable,false
-admin@company.com,deliverable,false
-```
-
-## License
-
-MIT — [Verifly.email](https://verifly.email)
+Use JSON output by default for AI agents. Use CSV output for spreadsheet, CRM, or mailing-list handoffs.
